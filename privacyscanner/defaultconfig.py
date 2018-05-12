@@ -6,6 +6,7 @@ SCAN_MODULES = [
     'privacyscanner.scanmodules.openwpm',
     'privacyscanner.scanmodules.serverleaks',
     'privacyscanner.scanmodules.testssl.https',
+    'privacyscanner.scanmodules.testssl.mx',
 ]
 NUM_WORKERS = 2
 MAX_EXECUTIONS = 100
