@@ -12,28 +12,10 @@ import logging
 
 from subprocess import call, check_output, DEVNULL, PIPE, Popen, TimeoutExpired
 
-from django.conf import settings
-
 from pprint import pprint
 
 
 log = logging.getLogger(__name__)
-
-TESTSSL_PATH = os.path.join(
-    settings.SCAN_TEST_BASEPATH, 'vendor/testssl.sh', 'testssl.sh')
-
-
-def run_testssl(hostname: str, check_mx: bool, remote_host: str = None) -> List[bytes]:
-    """Test the specified hostname with testssl and return the raw json result."""
-    
-    results = []
-
-    if remote_host:
-        results.append(_remote_testssl(hostname, remote_host))
-    else:
-        results = run_and_check_local_testssl(hostname, check_mx)
-
-    return results
 
 
 def starttls_handshake_possible(hostname: str, check_mx: bool) -> bool:
@@ -65,7 +47,7 @@ def starttls_handshake_possible(hostname: str, check_mx: bool) -> bool:
     return rcode == 0
 
 
-def run_and_check_local_testssl(hostname: str, check_mx: bool) -> List[bytes]:
+def run_testssl(hostname: str, check_mx: bool, testssl_path: str) -> List[bytes]:
     """run testssl in multiple stages, check return code and verify that
        remote server is not blocking our requests, sleep in case of problems."""
     SLEEP_TIME=60
@@ -94,7 +76,7 @@ def run_and_check_local_testssl(hostname: str, check_mx: bool) -> List[bytes]:
         progress.append("Running stage %i" % stage)
         for run in range(2):
             progress.append("Try %i ..." % run)
-            out, return_code = _local_testssl(hostname, check_mx, stage)
+            out, return_code = _local_testssl(hostname, check_mx, stage, testssl_path)
             if return_code != 0:
                 progress.append("Return code of testssl.sh != 0: %i" % return_code)
                 # testssl failed => try again
@@ -141,39 +123,7 @@ def run_and_check_local_testssl(hostname: str, check_mx: bool) -> List[bytes]:
     return results
 
 
-def save_result(jsonresults: List[bytes], hostname: str) -> Dict[str, Dict[str, Union[str, bytes]]]:
-    """prepare the result dictionary for test_site"""
-    result = {}
-    result['testssl_hostname'] = {
-           'mime_type': 'text/plain',
-           'data': hostname.encode(),
-    }
-
-    result['jsonresult'] = {
-            'mime_type': 'application/json',
-            'data': jsonresults[0],
-    }
-    
-    # We have to implement it flexibly like this because we have to be
-    # compatible with the case that remote_testssl was invoked. In this
-    # case there will only be one (i.e. the) jsonresult. Otherwise
-    # we will merge the all results in process_test_data.
-
-    jsonresults.pop(0) # this one was saved in 'jsonresult' above
-
-    index = 2 # first additional result will be jsonresult2
-    for res in jsonresults:
-        if res:
-            result["jsonresult%i" % index] = {
-                    'mime_type': 'application/json',
-                    'data': res,
-            }
-        index += 1
-    
-    return result
-
-
-def load_result(raw_data: list) -> Dict[str, Dict[str, object]]:
+def combine_results(raw_results: list) -> Dict[str, Dict[str, object]]:
     """load result(s) from raw_data and merge them into one dictionary"""
 
     # In case of json parse errors this will throw an Exception
@@ -182,11 +132,9 @@ def load_result(raw_data: list) -> Dict[str, Dict[str, object]]:
     
     inputs = []
 
-    for key in sorted(raw_data.keys()):
-        if key.startswith('jsonresult') and raw_data[key].get('data'):
-            data = json.loads(
-                    raw_data[key]['data'].decode())
-            inputs.append(data)
+    for raw_result in raw_results:
+        data = json.loads(raw_result.decode())
+        inputs.append(data)
 
     # Now we will merge the three results into one flat dict
     # this makes us independent from how testssl's json
@@ -504,20 +452,11 @@ def parse_common_testssl(json: Dict[str, str], prefix: str):
     return result
 
 
-def _remote_testssl(hostname: str, remote_host: str) -> bytes:
-    """Run testssl over ssh."""
-    return check_output([
-        'ssh',
-        remote_host,
-        hostname,
-    ])
-
-
-def _local_testssl(hostname: str, check_mx: bool, stage: int) -> bytes:
+def _local_testssl(hostname: str, check_mx: bool, stage: int, testssl_path: str) -> bytes:
     result_file = tempfile.mktemp()
 
     args = [
-        TESTSSL_PATH,
+        testssl_path,
         '--jsonfile-pretty', result_file,
         '--warnings=off',
         '--openssl-timeout', '10',

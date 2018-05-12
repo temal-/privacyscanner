@@ -8,84 +8,69 @@ import os
 from typing import Dict, Union
 from urllib.parse import urlparse
 
-from django.conf import settings
-# from privacyscore.utils import get_list_item_by_dict_entry
+from .common import run_testssl, parse_common_testssl, combine_results
 
-from .testssl.common import run_testssl, parse_common_testssl, save_result, load_result
-
-test_name = 'testssl_https'
-test_dependencies = [
+name = 'testssl_https'
+dependencies = [
     'network',
+]
+required_keys = [
+    'site_url',
+    'final_https_url',
+    'final_url_is_https',
+    'same_content_via_https',
 ]
 
 
-def test_site(url: str, previous_results: dict) -> Dict[str, Dict[str, Union[str, bytes]]]:
+def scan_site(result, logger, options):
     # Commented out for now because it gives bad results sometimes
-    scan_url = previous_results.get('final_https_url')
-    if scan_url and (previous_results.get('same_content_via_https') or previous_results.get('final_url_is_https')):
+    scan_url = result.get('final_https_url')
+    if scan_url and (
+            result.get('same_content_via_https') or
+            result.get('final_url_is_https')):
         hostname = urlparse(scan_url).hostname
-    elif url.startswith('https'):
-        hostname = urlparse(url).hostname
+    elif result['site_url'].startswith('https'):
+        hostname = urlparse(result['site_url']).hostname
     else:
-        return {
-            'jsonresult': {
-                'mime_type': 'application/json',
-                'data': b'',
-            },
-            'testssl_hostname': {
-                'mime_type': 'text/plain',
-                'data': b'',
-            }
-        }
+        logger.info('no url for SSL/TLS scan found')
+        result['web_has_ssl'] = False
+        return
     
-    jsonresults = run_testssl(hostname, False)
+    jsonresults = run_testssl(hostname, False, options['testssl_path'])
 
-    result = save_result(jsonresults, hostname)
-    
-    return result
+    combined_results = combine_results(jsonresults)
+    result.add_debug_file('combined_results.json', json.dumps(combined_results).encode())
 
+    result['web_ssl_finished'] = True
 
-def process_test_data(raw_data: list, previous_results: dict) -> Dict[str, Dict[str, object]]:
-    """Process the raw data of the test."""
-    rv = {'web_ssl_finished': True}
-    if raw_data['jsonresult']['data'] == b'':
-        rv['web_has_ssl'] = False
-        return rv
+    if combined_results.get('parse_error'):
+        result['web_scan_failed'] = True
+        return
 
-    loaded_data = load_result(raw_data)
-
-    if loaded_data.get('parse_error'):
-        rv['web_scan_failed'] = True
-        return rv
-
-    if loaded_data.get('scan_result_empty'):
+    if combined_results.get('scan_result_empty'):
         # The test terminated, but did not give any results => probably no HTTPS
-        rv['web_has_ssl'] = False
-        return rv
+        result['web_has_ssl'] = False
+        return
     
-    result = {}
-    if loaded_data.get('testssl_incomplete'):
+    if combined_results.get('testssl_incomplete'):
         result['web_testssl_incomplete'] = True
 
-    if loaded_data.get('incomplete_scans'):
-        result['web_testssl_incomplete_scans'] = loaded_data.get('incomplete_scans')
+    if combined_results.get('incomplete_scans'):
+        result['web_testssl_incomplete_scans'] = combined_results.get('incomplete_scans')
 
-    if loaded_data.get('missing_scans'):
-        result['web_testssl_missing_scans'] = loaded_data.get('missing_scans')
+    if combined_results.get('missing_scans'):
+        result['web_testssl_missing_scans'] = combined_results.get('missing_scans')
     
     # Grab common information
-    result.update(parse_common_testssl(loaded_data, "web"))
+    result.update(parse_common_testssl(combined_results, "web"))
     result["web_ssl_finished"] = True
     
     # detect headers
-    hostname = raw_data['testssl_hostname']['data'].decode()
-    result.update(_detect_hsts(loaded_data, hostname))
-    result.update(_detect_hpkp(loaded_data))
-
-    return result
+    result.update(_detect_hsts(combined_results, hostname, options['hsts_preload_path']))
+    result.update(_detect_hpkp(combined_results))
 
 
-def _detect_hsts(data: dict, host: str) -> dict:
+def _detect_hsts(data: dict, host: str, hsts_preload_path: str) -> dict:
     def _check_contained(preloads, domain, subdomains=False):
         for entry in preloads["entries"]:
             if entry["name"] == domain:
@@ -123,8 +108,8 @@ def _detect_hsts(data: dict, host: str) -> dict:
 
     # Check the HSTS Preloading database
     result["web_has_hsts_preload"] = False
-    with open(os.path.join(settings.SCAN_TEST_BASEPATH, "vendor/HSTSPreload", "transport_security_state_static")) as fo:
-        preloads = json.loads(fo.read())
+    with open(hsts_preload_path) as fo:
+        preloads = json.load(fo)
     
     # Check if exact hostname is included
     if not _check_contained(preloads, host):
