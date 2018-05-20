@@ -9,7 +9,15 @@ setup(
     author='PrivacyScore team',
     author_email='privacyscore@informatik.uni-hamburg.de',
     description='The privacyscanner component scans websites and provides data to PrivacyScore',
-    install_requires=['adblockparser', 'tldextract', 'pillow', 'toposort', 'dnspython', 'geoip2'],
+    install_requires=[
+        'adblockparser',
+        'tldextract',
+        'pillow',
+        'toposort',
+        'dnspython',
+        'geoip2',
+        'psycopg2-binary'
+        ],
     entry_points="""
     [console_scripts]
     privacyscanner=privacyscanner.scanner:main
