@@ -38,5 +38,5 @@ if [ "$local_version" -eq 0 ]
 then
   docker run -ti --rm temal/privacyscanner-python${PY_VERSION} $SCANNER_ARGS
 else
-  docker run -ti --rm -v $(pwd)/..:/app/privacyscanner temal/privacyscanner-python${PY_VERSION} $SCANNER_ARGS
+  docker run -ti --rm -v $(pwd)/..:/app/privacyscanner -v $(pwd)/../privacyscanner:/usr/local/lib/python3.7/site-packages/privacyscanner temal/privacyscanner-python${PY_VERSION} $SCANNER_ARGS
 fi
