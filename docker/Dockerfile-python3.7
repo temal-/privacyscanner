@@ -25,5 +25,10 @@ USER docker
 
 RUN python privacyscanner/scanner.py update_dependencies
 
+# remove file that looks like chrome
+USER root
+RUN rm /usr/local/bin/google-chrome
+USER docker
+
 ENTRYPOINT ["python", "privacyscanner/scanner.py"]
 CMD ["-h"]
