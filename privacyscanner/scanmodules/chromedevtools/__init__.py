@@ -3,7 +3,7 @@ from pathlib import Path
 from privacyscanner.filehandlers import NoOpFileHandler
 from privacyscanner.result import Result
 from privacyscanner.scanmodules import ScanModule
-from privacyscanner.scanmodules.chromedevtools.chromescan import ChromeScan, find_chrome_executable
+from privacyscanner.scanmodules.chromedevtools.chromescan import ChromeScan
 from privacyscanner.scanmodules.chromedevtools.extractors import FinalUrlExtractor, \
     GoogleAnalyticsExtractor, CookiesExtractor, RequestsExtractor, RedirectChainExtractor, \
     TLSDetailsExtractor, CertificateExtractor, ThirdPartyExtractor, InsecureContentExtractor, \
@@ -32,8 +32,6 @@ class ChromeDevtoolsScanModule(ScanModule):
     required_keys = ['site_url']
 
     def __init__(self, options):
-        if 'chrome_executable' not in options:
-            options['chrome_executable'] = find_chrome_executable()
         set_default_options(options, {
             'disable_javascript': False,
             'https_same_content_threshold': 0.9

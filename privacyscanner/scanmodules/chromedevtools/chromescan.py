@@ -188,13 +188,25 @@ class DNSNotResolvedError(Exception):
 
 
 class ChromeBrowser:
-    def __init__(self, debugging_port=9222, chrome_executable=None):
-        self._debugging_port = debugging_port
-        if chrome_executable is None:
-            chrome_executable = find_chrome_executable()
-        self._chrome_executable = chrome_executable
+    def __init__(self, options):
+        self._options = options
+        self._debugging_port = self._options.get('debugging_port', 9222)
+        self._chrome_executable = self._options.get('chrome_executable')
 
     def __enter__(self):
+        if 'chrome_remote_host' in self._options:
+            self._connect_to_chrome(host=self._options.get('chrome_remote_host'))
+        else:
+            self._start_chrome()
+            self._connect_to_chrome()
+        return self.browser
+
+    def _start_chrome(self):
+        if 'chrome_executable' in self._options:
+            self._chrome_executable = self._options.get('chrome_executable')
+        else:
+            self._chrome_executable = find_chrome_executable()
+
         self._temp_dir = tempfile.TemporaryDirectory()
         temp_dirname = self._temp_dir.name
         user_data_dir = Path(temp_dirname) / 'chrome-profile'
@@ -203,10 +215,7 @@ class ChromeBrowser:
         default_dir.mkdir()
         with (default_dir / 'Preferences').open('w') as f:
             json.dump(PREFS, f)
-        self._start_chrome(user_data_dir)
-        return self.browser
 
-    def _start_chrome(self, user_data_dir):
         extra_opts = [
             '--remote-debugging-port={}'.format(self._debugging_port),
             '--user-data-dir={}'.format(user_data_dir)
@@ -215,7 +224,9 @@ class ChromeBrowser:
         self._p = subprocess.Popen(command, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
 
-        self.browser = pychrome.Browser(url='http://127.0.0.1:{}'.format(
+    def _connect_to_chrome(self, host='127.0.0.1'):
+        self.browser = pychrome.Browser(url='http://{}:{}'.format(
+            host,
             self._debugging_port))
 
         # Wait until Chrome is ready
@@ -231,8 +242,9 @@ class ChromeBrowser:
             raise ChromeBrowserStartupError('Could not connect to Chrome')
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        kill_everything(self._p.pid)
-        self._temp_dir.cleanup()
+        if 'chrome_remote_host' not in self._options:
+            kill_everything(self._p.pid)
+            self._temp_dir.cleanup()
 
 
 class ChromeScan:
@@ -240,11 +252,10 @@ class ChromeScan:
         self._extractor_classes = extractor_classes
 
     def scan(self, result, logger, options, meta, debugging_port=9222):
-        executable = options['chrome_executable']
         scanner = PageScanner(self._extractor_classes)
         chrome_error = None
         content = None
-        with ChromeBrowser(debugging_port, executable) as browser:
+        with ChromeBrowser(options) as browser:
             try:
                 content = scanner.scan(browser, result, logger, options)
             except pychrome.TimeoutException:
