@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+function usage {
+  cat << EOF
+usage: run [-l] <python version> [privacyscanner arguments]
+
+-l: Use local version of privacyscanner
+EOF
+}
+
+if [ "$#" -lt 1 ]
+then
+  usage
+  exit 1
+fi
+
+local_version="0"
+
+while getopts "h?l:" opt; do
+    case "$opt" in
+    h|\?)
+      usage
+      exit 0
+      ;;
+    l)
+      local_version="1"
+      shift
+      ;;
+    esac
+done
+
+readonly PY_VERSION="$1"
+readonly SCANNER_ARGS="${@:2}"
+
+if [ "$local_version" -eq 0 ]
+then
+  docker run -ti --rm temal/privacyscanner-python${PY_VERSION} $SCANNER_ARGS
+else
+  docker run -ti --rm -v $(pwd)/..:/app/privacyscanner temal/privacyscanner-python${PY_VERSION} $SCANNER_ARGS
+fi

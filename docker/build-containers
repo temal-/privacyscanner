@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+pushd dockerfiles
+
+for i in Dockerfile*
+do
+  docker build -t temal/privacyscanner${i/Dockerfile/}:latest -f $i .
+done
+
+popd

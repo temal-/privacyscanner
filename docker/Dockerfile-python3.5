@@ -1,0 +1,29 @@
+# vim: set ft=dockerfile:
+
+FROM python:3.5-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    build-essential
+
+# privacyscanner update_dependencies needs to find something that looks like chrome
+RUN touch /usr/local/bin/google-chrome
+RUN chmod +x /usr/local/bin/google-chrome
+
+RUN mkdir /app
+WORKDIR /app
+RUN git clone https://github.com/PrivacyScore/privacyscanner.git
+WORKDIR /app/privacyscanner
+RUN pip3 install wheel
+RUN pip3 install .
+
+RUN useradd -ms /bin/bash docker
+RUN chown -R docker:docker /app
+USER docker
+
+RUN python privacyscanner/scanner.py update_dependencies
+
+ENTRYPOINT ["python", "privacyscanner/scanner.py"]
+CMD ["-h"]
