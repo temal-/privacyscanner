@@ -2,7 +2,7 @@ QUEUE_DB_DSN = 'dbname=privacyscore user=privacyscore password=privacyscore host
 MAX_EXECUTION_TIMES = {None: 300}
 SCAN_MODULE_OPTIONS = {
         'chromedevtools': {
-                'chrome_remote_host': '172.20.0.2'
+                'chrome_remote_host': '172.28.0.2'
                 }
         }
 SCAN_MODULES = [
