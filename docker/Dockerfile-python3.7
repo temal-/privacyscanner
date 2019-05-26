@@ -6,7 +6,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
     curl \
     git \
-    build-essential
+    build-essential \
+    bsdmainutils \
+    procps \
+    dnsutils
 
 # privacyscanner update_dependencies needs to find something that looks like chrome
 RUN touch /usr/local/bin/google-chrome
